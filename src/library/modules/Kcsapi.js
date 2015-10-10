@@ -211,6 +211,22 @@ Previously known as "Reactor"
 			KC3Network.trigger("Consumables");
 		},
 		
+		"api_get_member/useitem":function(params, response, headers){
+			var UTCtime = Math.floor((new Date(headers.Date)).getTime()/1000);
+			
+			var thisItem;
+			for(var ctr in response.api_data){
+				thisItem = response.api_data[ctr];
+				switch(thisItem.api_id){
+					case 68: PlayerManager.consumables.pike = thisItem.api_count; break;
+					case 69: PlayerManager.consumables.saury = thisItem.api_count; break;
+					default: break;
+				}
+			}
+			console.log("useitems", PlayerManager.consumables);
+			KC3Network.trigger("Consumables");
+		},
+		
 		
 		/*-------------------------------------------------------*/
 		/*----------------------[ LIBRARY ]----------------------*/
@@ -563,7 +579,7 @@ Previously known as "Reactor"
 			if(!ConfigManager.info_delta)
 				KC3Network.trigger("HQ");
 			
-			KC3Network.trigger("BattleResult");
+			KC3Network.trigger("BattleResult", response.api_data);
 			KC3Network.trigger("Quests");
 			
 			KC3Network.delay(1,"Fleet","GearSlots");
