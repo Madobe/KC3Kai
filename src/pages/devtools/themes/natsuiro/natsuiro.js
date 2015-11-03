@@ -29,39 +29,79 @@
 	var moraleClockEnd = 0;
 	var moraleClockRemain = 0;
 
-	// make sure localStorage.expedTabLastPick is available
-	// and is in correct format
-	function TouchExpeditionTabConfig() {
+	// make sure localStorage.expedTab is available
+	// and is in correct format.
+	// returns the configuration for expedTab
+	// (previously called localStorage.expedTabLastPick)
+	function ExpedTabValidateConfig() {
+		// data format for expedTab:
+		// data.fleetConf: an object
+		// data.fleetConf[fleetNum]:
+		// * fleetNum: 1,2,3,4
+		// * fleetNum could be either number or string
+		//	 they will all be implicitly converted
+		//	 to string (for indexing object) anyway
+		// data.fleetConf[fleetNum].expedition: a number
+		// data.expedConf: an object
+		// data.expedConf[expedNum]:
+		// * expedNum: 1..40
+		// * expedNum is number or string, just like fleetNum
+		// data.expedConf[expedNum].greatSuccess: boolean
+
 		var data;
-		if (! localStorage.expedTabLastPick) {
-			data = {
-				1: { selectedExpedition: 1, isGreatSuccess: false },
-				2: { selectedExpedition: 1, isGreatSuccess: false },
-				3: { selectedExpedition: 1, isGreatSuccess: false },
-				4: { selectedExpedition: 1, isGreatSuccess: false },
-			};
-			localStorage.expedTabLastPick = JSON.stringify( data );
+		if (! localStorage.expedTab) {
+			data = {};
+			data.fleetConf = {};
+			var i;
+			for (i=1; i<=4; ++i) {
+				data.fleetConf[i] = { expedition: 1 };
+			}
+			data.expedConf = {};
+			for (i=1; i<=40; ++i) {
+				data.expedConf[i] = { greatSuccess: false };
+			}
+
+			// TODO: the following part immigrates old data, so can be removed in next version
+			if (localStorage.expedTabLastPick) {
+				try {
+					var oldData = JSON.parse( localStorage.expedTabLastPick );
+					for (var fleetNum = 1; fleetNum <= 4; ++fleetNum) {
+						var oldRecord = oldData[fleetNum];
+						data.fleetConf[fleetNum].expedition = 
+							oldRecord.selectedExpedition;
+						data.expedConf[oldRecord.selectedExpedition].greatSuccess = 
+							oldRecord.isGreatSuccess;
+					}
+				} catch (err) {
+					console.log( "error when immigrating old data:", err);
+				} finally {
+					localStorage.removeItem("expedTabLastPick");
+				}
+			}
+
+			localStorage.expedTab = JSON.stringify( data );
 		} else {
-			data = JSON.parse( localStorage.expedTabLastPick );
+			data = JSON.parse( localStorage.expedTab );
 		}
 		return data;
 	}
-	
-	function UpdateExpeditionTabConfig() {
-		// update user last pick
-		var userConf = TouchExpeditionTabConfig();
-		userConf[selectedFleet].selectedExpedition = selectedExpedition;
-		userConf[selectedFleet].isGreatSuccess = plannerIsGreatSuccess;
-		localStorage.expedTabLastPick = JSON.stringify( userConf );
+
+	// selectedExpedition, plannerIsGreatSuccess + selectedFleet => storage
+	function ExpedTabUpdateConfig() {
+		var conf = ExpedTabValidateConfig();
+		conf.fleetConf[ selectedFleet ].expedition = selectedExpedition;
+		conf.expedConf[ selectedExpedition ].greatSuccess = plannerIsGreatSuccess;
+		localStorage.expedTab = JSON.stringify( conf );
 	}
 
 	// apply stored user settings, note that this function
 	// is not responsible for updating UI, so UpdateExpeditionPlanner() should be called after
 	// this to reflect the change
-	function ApplyExpeditionTabConfig() {
-		var expedTabLastPick = TouchExpeditionTabConfig()[selectedFleet];
-		selectedExpedition = expedTabLastPick.selectedExpedition;
-		plannerIsGreatSuccess = expedTabLastPick.isGreatSuccess;
+	// storage + selectedFleet => selectedExpedition, plannerIsGreatSuccess
+	function ExpedTabApplyConfig() {
+		var conf = ExpedTabValidateConfig();
+		selectedExpedition = conf.fleetConf[selectedFleet].expedition;
+		plannerIsGreatSuccess = conf.expedConf[ selectedExpedition ].greatSuccess;
 	}
 	
 	$(document).on("ready", function(){
@@ -186,11 +226,9 @@
 		$( ".module.activity .activity_expeditionPlanner .expres_greatbtn" )
 			.on("click",function() {
 				plannerIsGreatSuccess = !plannerIsGreatSuccess;
-				
-				UpdateExpeditionTabConfig();
+				ExpedTabUpdateConfig();
 				NatsuiroListeners.UpdateExpeditionPlanner();
 			} );
-
 
 		
 		/* Morale timers
@@ -294,7 +332,9 @@
 		$(".expedition_entry").on("click",function(){
 			selectedExpedition = parseInt( $(this).data("expId") );
 			//console.log("selected Exped "+selectedExpedition);
-			UpdateExpeditionTabConfig();
+			var conf = ExpedTabValidateConfig();
+			plannerIsGreatSuccess = conf.expedConf[ selectedExpedition ].greatSuccess;
+			ExpedTabUpdateConfig();
 			NatsuiroListeners.UpdateExpeditionPlanner();
 		});
 		
@@ -307,7 +347,7 @@
 			selectedFleet = parseInt( $(this).text(), 10);
 			console.log(selectedFleet);
 			NatsuiroListeners.Fleet();
-			ApplyExpeditionTabConfig();
+			ExpedTabApplyConfig();
 			NatsuiroListeners.UpdateExpeditionPlanner();
 		});
 		
@@ -1588,6 +1628,13 @@
 			$("#atab_activity").addClass("active");
 			$(".module.activity .activity_box").hide();
 			$(".module.activity .activity_expedition").fadeIn(500);
+
+			// after getting the result, we assume user will just resupply & resend to the same expedition
+			// it makes sense to update expedition planner with current fleet-expedition relation.
+			var expedTabConf = ExpedTabValidateConfig();
+			var resultFleetNum = data.params.api_deck_id; // string
+			expedTabConf.fleetConf[ resultFleetNum ].expedition = data.expedNum;
+			localStorage.expedTab = JSON.stringify( expedTabConf );
 		},
 
 		UpdateExpeditionPlanner: function (data) {
@@ -1766,7 +1813,7 @@
 						var shipReqBox = $("#factory .expPlanner_shipReqBox")
 							.clone()
 							.appendTo( jq );
-						shipReqBox.text(dataReq[index].stypeOneOf+":"+dataReq[index].stypeReqCount);
+						shipReqBox.text(dataReq[index].stypeOneOf.join("/")+":"+dataReq[index].stypeReqCount);
 						if (dataResult[index] === false) {
 							markFailed( shipReqBox );
 						} else if (dataResult[index] === true) {
