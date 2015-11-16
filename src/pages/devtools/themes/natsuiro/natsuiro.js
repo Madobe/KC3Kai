@@ -133,6 +133,27 @@
 		KC3Database.init();
 		KC3Translation.execute();
 		
+		if(ConfigManager.checkLiveQuests){
+			$.ajax({
+				dataType: "JSON",
+				url: "https://raw.githubusercontent.com/KC3Kai/kc3-translations/master/data/"+ConfigManager.language+"/quests.json?v="+((new Date()).getTime()),
+				success: function(newQuestTLs){
+					if(JSON.stringify(newQuestTLs) != JSON.stringify(KC3Meta._quests)){
+						console.log("new quests detected, updating quest list from live");
+						var enQuests = JSON.parse($.ajax({
+							url : '../../../../data/lang/data/en/quests.json',
+							async: false
+						}).responseText);
+							
+						KC3Meta._quests = $.extend(true, enQuests, newQuestTLs);
+						console.log(KC3Meta._quests);
+					}else{
+						console.log("no new quests...");
+					}
+				}
+			});
+		}
+		
 		// Panel customizations: panel opacity
 		$(".wrapper_bg").css("opacity", ConfigManager.pan_opacity/100);
 		
@@ -150,6 +171,11 @@
 		// Close CatBomb modal
 		$("#catBomb .closebtn").on("click", function(){
 			$("#catBomb").fadeOut(300);
+		});
+		
+		// Close CatBomb modal
+		$("#gameUpdate .closebtn").on("click", function(){
+			$("#gameUpdate").fadeOut(300);
 		});
 		
 		// HQ name censoring
@@ -534,6 +560,21 @@
 			$("#catBomb .title").html( data.title );
 			$("#catBomb .description").html( data.message );
 			$("#catBomb").fadeIn(300);
+		},
+		
+		GameUpdate: function(data){
+			console.log("GameUpdate triggered");
+			$("#gameUpdate").hide();
+			
+			if(data[0] > 0 && data[1]>0){
+				$("#gameUpdate .description a").html("There is(are) <strong>"+data[0]+" new ship(s)</strong> and <strong>"+data[1]+" new equipment</strong>! Click here to learn more about them in the Strategy Room!");
+			}else if(data[0] > 0){
+				$("#gameUpdate .description a").html("There is(are) <strong>"+data[0]+" new ship(s)</strong>! Click here to learn more about them in the Strategy Room!");
+			}else{
+				$("#gameUpdate .description a").html("There is(are) <strong>"+data[1]+" new equipment</strong>! Click here to learn more about them in the Strategy Room!");
+			}
+			
+			$("#gameUpdate").fadeIn(300);
 		},
 		
 		HQ: function(data){
