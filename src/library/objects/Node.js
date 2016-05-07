@@ -152,19 +152,21 @@ Used by SortieManager
 		this.nodalXP = 0;
 		this.lostShips = [[],[]];
 		this.mvps = [];
+		this.dameConConsumed = [];
+		this.dameConConsumedEscort = [];
 		return this;
 	};
 	
 	KC3Node.prototype.defineAsResource = function( nodeData ){
 		this.type = "resource";
-		this.item = nodeData.api_itemget.api_icon_id;
+		this.item = nodeData.api_itemget[0].api_icon_id;
 		this.icon = function(folder){
 			return folder+(
 				["fuel","ammo","steel","bauxite","ibuild","bucket","devmat","compass","","box1","box2","box3"]
-				[nodeData.api_itemget.api_icon_id-1]
+				[nodeData.api_itemget[0].api_icon_id - 1]
 			)+".png";
 		};
-		this.amount = nodeData.api_itemget.api_getcount;
+		this.amount = nodeData.api_itemget[0].api_getcount;
 		if(this.item < 8)
 			KC3SortieManager.materialGain[this.item-1] += this.amount;
 		return this;
@@ -250,6 +252,7 @@ Used by SortieManager
 		this.eships = enemyships;
 		this.eformation = battleData.api_formation[1];
 		this.eParam = battleData.api_eParam;
+		this.eKyouka = battleData.api_eKyouka;
 		this.eSlot = battleData.api_eSlot;
 
 		this.supportFlag = (battleData.api_support_flag>0);
@@ -282,8 +285,8 @@ Used by SortieManager
 		
 		this.airbattle = KC3Meta.airbattle( planePhase.api_disp_seiku );
 		
-		if(!!attackPhase){
-			this.antiAirFire = attackPhase.api_air_fire;
+		if(!!attackPhase && !!attackPhase.api_air_fire){
+			this.antiAirFire = [ attackPhase.api_air_fire ];
 		}
 		
 		// Fighter phase 1
@@ -324,6 +327,12 @@ Used by SortieManager
 			if(battleData.api_kouku2.api_stage2 !== null){
 				this.planeBombers.player[1] += battleData.api_kouku2.api_stage2.api_f_lostcount;
 				this.planeBombers.abyssal[1] += battleData.api_kouku2.api_stage2.api_e_lostcount;
+				if(!!battleData.api_kouku2.api_stage2.api_air_fire){
+					if(!this.antiAirFire || this.antiAirFire.length<1){
+						this.antiAirFire = [null];
+					}
+					this.antiAirFire[1] = battleData.api_kouku2.api_stage2.api_air_fire;
+				}
 			}
 		}
 
@@ -337,27 +346,31 @@ Used by SortieManager
 		var ship;
 		var fleetId = parseInt(fleetSent) || KC3SortieManager.fleetSent;
 		
-		if ((typeof PlayerManager.combinedFleet === "undefined") || (PlayerManager.combinedFleet === 0) || fleetId>1){ // single fleet: not combined, or sent fleet is not first fleet
+		if ((typeof PlayerManager.combinedFleet === "undefined") || (PlayerManager.combinedFleet === 0) || fleetId>1){
+			// single fleet: not combined, or sent fleet is not first fleet
+			
 			// Update our fleet
 			fleet = PlayerManager.fleets[fleetId - 1];
 			// damecon ignored for PvP
-			dameConCode = KC3SortieManager.isPvP ? [0,0,0, 0,0,0] :	 fleet.getDameConCodes();
+			dameConCode = KC3SortieManager.isPvP() 
+				? [0,0,0, 0,0,0] 
+				: fleet.getDameConCodes();
 			result = DA.analyzeBattleJS(dameConCode, battleData); 
-			// console.log("Single Fleet");
-			// console.log("analysis result", result);
-
+			// console.debug("Damage analysis result", result);
+			
 			var endHPs = {
 				ally: beginHPs.ally.slice(),
 				enemy: beginHPs.enemy.slice()
 			};
 			
-			// Update enemy
+			// Update enemy ships
 			for (i = 7; i < 13; i++) {
 				this.enemyHP[i-7] = result.enemy[i-7];
 				endHPs.enemy[i-7] = result.enemy[i-7] ? result.enemy[i-7].hp : -1;
 				this.enemySunk[i-7] = result.enemy[i-7] ? result.enemy[i-7].sunk : true;
 			}
 			
+			// update player ships
 			shipNum = fleet.countShips();
 			for(i = 0; i < shipNum; i++) {
 				ship = fleet.ship(i);
@@ -365,11 +378,20 @@ Used by SortieManager
 				this.allyNoDamage &= ship.hp[0]==ship.afterHp[0];
 				ship.afterHp[1] = ship.hp[1];
 				endHPs.ally[i] = result.main[i].hp;
+				// Check if damecon consumed, if yes, get item consumed
+				if (result.main[i].dameConConsumed){
+					this.dameConConsumed[i] = ship.findDameCon();
+				} else {
+					this.dameConConsumed[i] = false;
+				}
 			}
 			
-			if(ConfigManager.info_btrank){
+			if(ConfigManager.info_btrank &&
+				// long distance aerial battle not predictable for now, see #1333
+				// but go for aerial battle (eventKind:4) possible Yasen
+				[6].indexOf(this.eventKind)<0 ){
 				this.predictedRank = KC3Node.predictRank( beginHPs, endHPs );
-				// console.info("Rank Predict:", this.predictedRank);
+				// console.debug("Rank Predict:", this.predictedRank);
 			}
 		} else {
 			// combined fleet
@@ -407,8 +429,14 @@ Used by SortieManager
 				ship.afterHp[0] = mainFleet[i].hp;
 				this.allyNoDamage &= ship.hp[0]==ship.afterHp[0];
 				ship.afterHp[1] = ship.hp[1];
+				// Check if damecon consumed, if yes, get item consumed
+				if (mainFleet[i].dameConConsumed){
+					this.dameConConsumed[i] = ship.findDameCon();
+				} else {
+					this.dameConConsumed[i] = false;
+				}
 			}
-
+			
 			// Update escort fleet
 			fleet = PlayerManager.fleets[1];
 			shipNum = fleet.countShips();
@@ -418,7 +446,14 @@ Used by SortieManager
 				ship.afterHp[0] = escortFleet[i].hp;
 				this.allyNoDamage &= ship.hp[0]==ship.afterHp[0];
 				ship.afterHp[1] = ship.hp[1];
+				// Check if damecon consumed, if yes, get item consumed
+				if (escortFleet[i].dameConConsumed){
+					this.dameConConsumedEscort[i] = ship.findDameCon();
+				} else {
+					this.dameConConsumedEscort[i] = false;
+				}
 			}
+			
 		}
 		if(this.gaugeDamage > -1) {
 			this.gaugeDamage = Math.min(this.originalHPs[7],this.originalHPs[7] - this.enemyHP[0].hp);
@@ -484,6 +519,7 @@ Used by SortieManager
 		this.eships = enemyships;
 		this.eformation = this.eformation || nightData.api_formation[1];
 		this.eParam = nightData.api_eParam;
+		this.eKyouka = nightData.api_eKyouka;
 		this.eSlot = nightData.api_eSlot;
 		
 		// if we did not started at night, at this point dayBeginHPs should be available
@@ -555,7 +591,7 @@ Used by SortieManager
 		}
 		if(ConfigManager.info_btrank){
 			this.predictedRankNight = KC3Node.predictRank( beginHPs, endHPs );
-			// console.info("Rank Predict (Night):", this.predictedRankNight);
+			// console.debug("Rank Predict (Night):", this.predictedRankNight);
 		}
 		if(this.gaugeDamage > -1)
 			this.gaugeDamage = this.gaugeDamage + 
@@ -572,7 +608,7 @@ Used by SortieManager
 			this.nodalXP = resultData.api_get_base_exp;
 			if(this.allyNoDamage && this.rating === "S")
 				this.rating = "SS";
-			console.log("This battle, have damaged the ally fleet",!this.allyNoDamage);
+			console.log("This battle, the ally fleet has no damage:",this.allyNoDamage);
 			
 			if(this.isBoss()) {
 				var
