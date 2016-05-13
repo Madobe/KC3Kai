@@ -13,12 +13,22 @@ Contains summary information about a fleet and its 6 ships
 		this.ships = [ -1, -1, -1, -1, -1, -1 ];
 		this.mission = [ 0, 0, 0, 0 ];
 		this.akashi_tick = 0;
-		
+
+		// useful when making virtual fleet objects.
+		// requirements:
+		// * "ShipManager.get( shipId )" should get the intended ship
+		// * "shipId" is taken from "this.ships"
+		// * "shipId === -1" should always return a dummy ship
+		this.ShipManager = null;
+
 		if(!!data) {
 			$.extend(this,data);
 		}
 	};
 	
+	KC3Fleet.prototype.getShipManager = function() {
+		return this.ShipManager ? this.ShipManager : KC3ShipManager;
+	};
 	KC3Fleet.prototype.update = function( data ){
 		if(typeof data.api_member_id != "undefined"){
 			var
@@ -111,7 +121,7 @@ Contains summary information about a fleet and its 6 ships
 			case 'number':
 			case 'string':
 				/* Number/String => converted as fleet slot key */
-				return KC3ShipManager.get( this.ships[slot] );
+				return self.getShipManager().get( this.ships[slot] );
 			case 'undefined':
 				/* Undefined => returns whole fleet as ship object */
 				return Array.apply(null, {length: this.countShips()})
@@ -398,6 +408,7 @@ Contains summary information about a fleet and its 6 ships
 		switch(ConfigManager.elosFormula){
 			case 1: return this.eLos1();
 			case 2: return this.eLos2();
+			case 4: return this.eLos4();
 			default: return this.eLos3();
 		}
 	};
@@ -461,7 +472,7 @@ Contains summary information about a fleet and its 6 ships
 		}
 		
 		function ConsiderEquipment(itemData){
-			if(itemData.itemId === 0) return false;
+			if(itemData.itemId === 0 || itemData.masterId === 0) return false;
 			switch( itemData.master().api_type[2] ){
 				case  7: dive += itemData.master().api_saku; break;
 				case  8: torp += itemData.master().api_saku; break;
@@ -478,7 +489,8 @@ Contains summary information about a fleet and its 6 ships
 		var self = this;
 		Array.apply(null, {length: 6})
 			.map(Number.call, Number)
-			.forEach(function(x){ConsiderShip(self.ship(x));});
+			.forEach(function(x){
+				ConsiderShip(self.ship(x));});
 		
 		var total = ( dive * 1.0376255 )
 			+ ( torp * 1.3677954 )
@@ -490,6 +502,90 @@ Contains summary information about a fleet and its 6 ships
 			+ ( srch * 0.9067950 )
 			+ ( nakedLos * 1.6841056 )
 			+ ( (Math.floor(( PlayerManager.hq.level + 4) / 5) * 5) * -0.6142467 );
+		return total;
+	};
+
+	/**
+	 *  LoS : "Formula 33"
+	 *  http://kancolle.wikia.com/wiki/Line_of_Sight
+	 *  http://ja.kancolle.wikia.com/wiki/%E3%83%9E%E3%83%83%E3%83%97%E7%B4%A2%E6%95%B5
+	 *  ID refer to start2 API, api_mst_slotitem_equiptype
+	 * @returns {number}
+	 */
+	KC3Fleet.prototype.eLos4 = function(){
+		var multipliers = {
+			6: 0.6, // Carrier-Based Fighter
+			7: 0.6, // Carrier-Based Dive Bomber
+			8: 0.8, // Carrier-Based Torpedo Bomber
+			9: 1, // Carrier-Based Reconnaissance Aircraft
+			10: 1.2, // Reconnaissance Seaplane
+			11: 1.1, // Seaplane Bomber
+			12: 0.6, // Small Radar
+			13: 0.6, // Large Radar
+			26: 0.6, // ASW Patrol Aircraft
+			29: 0.6, // Searchlight Small / Large
+			34: 0.6, // Fleet Command Facility
+			35: 0.6, // SCAMP
+			39: 0.6, // Skilled Lookouts
+			40: 0.6, // Sonar
+			41: 0.6, // Large Flying Boat
+			45: 0.6,  // Seaplane Fighter
+			94: 1 // Carrier-Based Reconnaissance Aircraft
+		};
+
+		var total = 0;
+		var emptyShipSlot = 0;
+
+		// iterate ships
+		for (var i = 0; i < 6; i++) {
+			var shipData = this.ship(i);
+
+			// if empty slot or ship flee ?
+			if(shipData.rosterId === 0 || shipData.didFlee) {
+				emptyShipSlot++;
+				continue;
+			}
+
+			// ship's naked los
+			total += Math.sqrt(shipData.nakedLoS());
+
+			// iterate ship's equipment
+			for (var j = 0; j < 4; j++) {
+				if (shipData.items[j] > -1) {
+					var itemData = shipData.equipment(j);
+					if (itemData.itemId !== 0) {
+						var itemType = itemData.master().api_type[2];
+						var multiplier = multipliers[itemType];
+						if (multiplier) {
+							var equipment_bonus = Math.sqrt(itemData.stars);
+
+							if (itemType === 12 ||
+								itemType === 13) {
+								// radar bonus
+								equipment_bonus *= 1.25;
+							} else if (itemType === 10) {
+								// Reconnaissance Seaplane bonus
+								equipment_bonus *= 1.2;
+							} else if (itemType === 29) {
+								// searchlight no bonus
+								equipment_bonus = 0;
+							}
+
+							// multiple * (raw equipment los + equipment bonus)
+							total += multiplier * (itemData.master().api_saku + equipment_bonus);
+						}
+					}
+				}
+			}
+
+		}
+
+		// player hq level adjustment
+		total -= Math.ceil(0.4 * PlayerManager.hq.level);
+
+		// empty ship slot adjustment
+		total += 2 * emptyShipSlot;
+
 		return total;
 	};
 	
@@ -536,5 +632,10 @@ Contains summary information about a fleet and its 6 ships
 			return {};
 		}
 	};
-	
+
+	KC3Fleet.prototype.minimized = function() {
+		var fleet = $.extend({},this);
+		delete fleet.ShipManager;
+		return fleet;
+	};
 })();
