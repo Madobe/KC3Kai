@@ -928,7 +928,7 @@ Previously known as "Reactor"
 		"api_req_quest/clearitemget": function(params, response, headers){
 			var 
 				ctime    = Date.safeToUtcTime(headers.Date),
-				quest    = params.api_quest_id,
+				quest    = Number(params.api_quest_id),
 				data     = response.api_data,
 				material = data.api_material,
 				consume  = [0,0,0,0],
@@ -960,7 +960,12 @@ Previously known as "Reactor"
 		/* Stop Quest
 		-------------------------------------------------------*/
 		"api_req_quest/stop":function(params, response, headers){
-			
+			var quest = Number(params.api_quest_id);
+			// Restore to Open but Not Active
+			KC3QuestManager.get(quest).status = 1;
+			KC3QuestManager.save();
+			// Trigger quest listeners
+			KC3Network.trigger("Quests");
 		},
 		
 		/*-------------------------------------------------------*/
@@ -1382,9 +1387,14 @@ Previously known as "Reactor"
 				rsc   = [0,0,0,0,0,0,0,0],
 				ctime = Date.safeToUtcTime(headers.Date);
 			$.each(params.api_slotitem_ids.split("%2C"), function(index, itemId){
-				KC3GearManager.get(itemId).master().api_broken.forEach(function(x,i){
+				var gearMaster = KC3GearManager.get(itemId).master();
+				gearMaster.api_broken.forEach(function(x,i){
 					rsc[i] += x;
 				});
+				// F38: Weekly Scrap Anti-Air Guns
+				if([21].indexOf(gearMaster.api_type[2]) >-1){
+					KC3QuestManager.get(638).increment();
+				}
 				KC3GearManager.remove( itemId );
 			});
 			KC3GearManager.save();
