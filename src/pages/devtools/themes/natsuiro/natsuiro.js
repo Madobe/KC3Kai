@@ -120,21 +120,6 @@
 			}
 		}
 		
-		function switchToFleet(targetFleet) {
-			if (targetFleet === "combined") {
-				$(".module.controls .fleet_rengo").trigger("click");
-			} else {
-				var fleetControls = $(".module.controls .fleet_num").toArray();
-				for (var i=0; i<fleetControls.length; ++i) {
-					var thisFleet = parseInt( $(fleetControls[i]).text(), 10);
-					if (thisFleet === targetFleet) {
-						$( fleetControls[i] ).trigger("click");
-						break;
-					}
-				}
-			}
-		}
-		
 		if (availableFleetInd !== -1) {
 			selectedFleet = availableFleetInd + 1;
 			console.debug("Find available fleet:", selectedFleet);
@@ -150,6 +135,21 @@
 			switchToFleet(PlayerManager.combinedFleet !== 0 ? "combined" : 1);
 			// also return focus to basic tab
 			$("#atab_basic").trigger("click");
+		}
+	}
+	
+	function switchToFleet(targetFleet) {
+		if (targetFleet === "combined") {
+			$(".module.controls .fleet_rengo").trigger("click");
+		} else {
+			var fleetControls = $(".module.controls .fleet_num").toArray();
+			for (var i=0; i<fleetControls.length; ++i) {
+				var thisFleet = parseInt( $(fleetControls[i]).text(), 10);
+				if (thisFleet === targetFleet) {
+					$( fleetControls[i] ).trigger("click");
+					break;
+				}
+			}
 		}
 	}
 	
@@ -897,6 +897,13 @@
 		Triggered when fleet data is changed
 		---------------------------------------------*/
 		Fleet: function(data){
+			if (typeof data != "undefined") {
+				if (typeof data.switchTo != "undefined") {
+					switchToFleet(data.switchTo);
+					return false;
+				}
+			}
+			
 			var FleetSummary, MainRepairs;
 			$(".shiplist_single").html("");
 			$(".shiplist_single").hide();
@@ -1209,15 +1216,24 @@
 					.some   (function( shpDat) {
 						return !shpDat.didFlee && shpDat.isTaiha();
 					})
-				&& !KC3SortieManager.isPvP() // if PvP, no taiha alert
 			) {
-				if(ConfigManager.alert_taiha){
-					$("#critical").show();
-					if(critAnim){ clearInterval(critAnim); }
-					critAnim = setInterval(function() {
-						$("#critical").toggleClass("anim2");
-					}, 500);
-					critSound.play();
+				if (!ConfigManager.alert_taiha_pvp && KC3SortieManager.isPvP()) {
+					// if PvP and config for PvP is disabled, do nothing
+					
+				} else if(ConfigManager.alert_taiha){
+					
+					if(ConfigManager.alert_taiha_panel){
+						$("#critical").show();
+						if(critAnim){ clearInterval(critAnim); }
+						critAnim = setInterval(function() {
+							$("#critical").toggleClass("anim2");
+						}, 500);
+					}
+					
+					if(ConfigManager.alert_taiha_sound){
+						critSound.play();
+					}
+					
 					
 					(new RMsg("service", "taihaAlertStart", {
 						tabId: chrome.devtools.inspectedWindow.tabId
