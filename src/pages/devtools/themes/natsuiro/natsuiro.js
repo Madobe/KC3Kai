@@ -141,6 +141,8 @@
 	function switchToFleet(targetFleet) {
 		if (targetFleet === "combined") {
 			$(".module.controls .fleet_rengo").trigger("click");
+		} else if (targetFleet === "lbas") {
+			$(".module.controls .fleet_lbas").trigger("click");
 		} else {
 			var fleetControls = $(".module.controls .fleet_num").toArray();
 			for (var i=0; i<fleetControls.length; ++i) {
@@ -153,6 +155,28 @@
 		}
 	}
 
+	function attemptToSwitchFleet(targetFleet) {
+		// Won't switch when option is disabled at Settings
+		if (!ConfigManager.info_auto_fleet_view) {
+			return false;
+		}
+		// Won't switch if current selected is combined and target will be 1 or 2
+		if (selectedFleet == 5 && (targetFleet == 1 ||
+			targetFleet == 2 || targetFleet === "combined")) {
+			return false;
+		}
+		// Won't switch if current selected is LBAS
+		if (selectedFleet == 6 && targetFleet === "lbas") {
+			return false;
+		}
+		// Won't switch if target fleet is current
+		if (selectedFleet == targetFleet) {
+			return false;
+		}
+		switchToFleet(targetFleet);
+		return true;
+	}
+	
 	/* Morale timers
 	- use end time difference not remaining decrements for accuracy against lag
 	--------------------------------------------*/
@@ -215,7 +239,7 @@
 		KC3TimerManager.update();
 
 		// Docking ~ Akashi Timer Stat
-		var TotalFleet = selectedFleet == 5 ? [0,1] : [selectedFleet-1];
+		var TotalFleet = selectedFleet == 5 ? [0,1] : (selectedFleet == 6 ? [0,1,2,3] : [selectedFleet-1]);
 		var data = TotalFleet
 			.map(function(x){return PlayerManager.fleets[x].highestRepairTimes(true);})
 			.reduce(function(pre,cur){
@@ -227,7 +251,7 @@
 				return data;
 			});
 		UpdateRepairTimerDisplays(data);
-
+		
 		// Akashi current
 		var baseElement = (TotalFleet.length > 1) ? ['main','escort'] : ['single'];
 		var ctime = Date.now();
@@ -542,6 +566,7 @@
 		$(".module.controls .fleet_num").on("click", function(){
 			$(".module.controls .fleet_num").removeClass("active");
 			$(".module.controls .fleet_rengo").removeClass("active");
+			$(".module.controls .fleet_lbas").removeClass("active");
 			$(this).addClass("active");
 			selectedFleet = parseInt( $(this).text(), 10);
 			NatsuiroListeners.Fleet();
@@ -552,9 +577,19 @@
 		// Combined Fleet button
 		$(".module.controls .fleet_rengo").on("click", function(){
 			$(".module.controls .fleet_num").removeClass("active");
+			$(".module.controls .fleet_lbas").removeClass("active");
 			$(this).addClass("active");
 			selectedFleet = 5;
 			NatsuiroListeners.Fleet();
+		});
+		
+		// LBAS button
+		$(".module.controls .fleet_lbas").on("click", function(){
+			$(".module.controls .fleet_num").removeClass("active");
+			$(".module.controls .fleet_rengo").removeClass("active");
+			$(this).addClass("active");
+			selectedFleet = 6;
+			NatsuiroListeners.Lbas();
 		});
 
 		// Toggle mini-bars under combined fleet ship list
@@ -865,7 +900,7 @@
 					console.warn("Quest status invalid:", quest);
 				}
 			};
-			$(".module.quests").html("");
+			$(".module.quests").empty();
 			$.each(KC3QuestManager.getActives(), function(index, quest){
 				questBox = $("#factory .quest").clone().appendTo(".module.quests");
 				if(!quest.tracking){ questBox.addClass("untracked"); }
@@ -897,18 +932,110 @@
 		Triggered when fleet data is changed
 		---------------------------------------------*/
 		Fleet: function(data){
+			// Auto-Switch Fleet View
 			if (typeof data != "undefined") {
 				if (typeof data.switchTo != "undefined") {
-					switchToFleet(data.switchTo);
-					return false;
+					if(attemptToSwitchFleet(data.switchTo)) {
+						return false;
+					}
 				}
 			}
 
+			// Expedition Timer Faces
+			if(KC3TimerManager._exped.length > 0){
+				KC3TimerManager._exped[0].faceId = PlayerManager.fleets[1].ship(0).masterId;
+				KC3TimerManager._exped[1].faceId = PlayerManager.fleets[2].ship(0).masterId;
+				KC3TimerManager._exped[2].faceId = PlayerManager.fleets[3].ship(0).masterId;
+				KC3TimerManager._exped[0].face();
+				KC3TimerManager._exped[1].face();
+				KC3TimerManager._exped[2].face();
+			}
+
+			// TAIHA ALERT CHECK
+			if (
+				PlayerManager.fleets
+					.filter (function(  x,  i) {
+						var
+							cf = PlayerManager.combinedFleet, // Marks combined flag
+							fs = KC3SortieManager.fleetSent,  // Which fleet that requires to focus out
+							so = KC3SortieManager.onSortie;   // Is it on sortie or not? if not, focus all fleets.
+						return !so || ((cf&&fs===1) ? (i <= 1) : (i == fs-1));
+					})
+					.map    (function(  fldat) { return fldat.ships; })
+					.reduce (function(  x,  y) { return x.concat(y); })
+					.filter (function( shipId) { return shipId >= 0; })
+					.map    (function( shipId) { return KC3ShipManager.get(shipId); })
+					.some   (function( shpDat) {
+						return !shpDat.didFlee && shpDat.isTaiha();
+					})
+			) {
+				if (!ConfigManager.alert_taiha_pvp && KC3SortieManager.isPvP()) {
+					// if PvP and config for PvP is disabled, do nothing
+
+				} else if(ConfigManager.alert_taiha){
+
+					if(ConfigManager.alert_taiha_panel){
+						$("#critical").show();
+						if(critAnim){ clearInterval(critAnim); }
+						critAnim = setInterval(function() {
+							$("#critical").toggleClass("anim2");
+						}, 500);
+					}
+
+					if(ConfigManager.alert_taiha_sound){
+						critSound.play();
+					}
+
+					(new RMsg("service", "taihaAlertStart", {
+						tabId: chrome.devtools.inspectedWindow.tabId
+					})).execute();
+				}
+			} else {
+				if(critAnim){ clearInterval(critAnim); }
+				$("#critical").hide();
+				critSound.pause();
+
+				(new RMsg("service", "taihaAlertStop", {
+					tabId: chrome.devtools.inspectedWindow.tabId
+				})).execute();
+			}
+
+			// FLEET BUTTONS RESUPPLY STATUSES
+			$(".module.controls .fleet_num").each(function(i, element){
+				$(element).removeClass("needsSupply");
+				$(element).removeClass("hasTaiha");
+				if(!$(element).hasClass("active")){
+					if(!PlayerManager.fleets[i].isSupplied()){
+						$(element).addClass("needsSupply");
+					}
+					if(PlayerManager.fleets[i].hasTaiha()){
+						$(element).addClass("hasTaiha");
+					}
+				}
+			});
+
+			// whether this update is triggered because of sending expeditions
+			if (expeditionStarted && ConfigManager.info_auto_exped_tab) {
+				// clear flag
+				expeditionStarted = false;
+
+				// we'll try switching to the next available fleet if any
+				ExpedTabAutoFleetSwitch(false);
+			}
+			NatsuiroListeners.UpdateExpeditionPlanner();
+
+			// If LBAS is selected, do not respond to rest fleet update
+			if (selectedFleet == 6) {
+				return false;
+			}
+
 			var FleetSummary, MainRepairs;
-			$(".shiplist_single").html("");
+			$(".shiplist_single").empty();
 			$(".shiplist_single").hide();
-			$(".shiplist_combined_fleet").html("");
+			$(".shiplist_combined_fleet").empty();
 			$(".shiplist_combined").hide();
+			$(".airbase_list").empty();
+			$(".airbase_list").hide();
 
 			var thisNode, dameConConsumed;
 			if(KC3SortieManager.onSortie){
@@ -976,8 +1103,8 @@
 					badState: [
 						MainFleet.needsSupply(false)|| EscortFleet.needsSupply(false),
 						MainFleet.needsSupply(true) || EscortFleet.needsSupply(true) ,
-						MainFleet.ship(0).isTaiha(),
-						EscortFleet.ship(0).isStriped()
+						MainFleet.ship(0).isTaiha() || EscortFleet.ship(0).isTaiha(),
+						MainFleet.ship(0).isStriped() || EscortFleet.ship(0).isStriped()
 					],
 					lowestMorale:
 						(MainFleet.lowestMorale() < EscortFleet.lowestMorale())
@@ -1053,16 +1180,6 @@
 			$(".summary-airfp .summary_text").text( FleetSummary.air );
 			$(".summary-speed .summary_text").text( FleetSummary.speed );
 
-			// Expedition Timer Faces
-			if(KC3TimerManager._exped.length > 0){
-				KC3TimerManager._exped[0].faceId = PlayerManager.fleets[1].ship(0).masterId;
-				KC3TimerManager._exped[1].faceId = PlayerManager.fleets[2].ship(0).masterId;
-				KC3TimerManager._exped[2].faceId = PlayerManager.fleets[3].ship(0).masterId;
-				KC3TimerManager._exped[0].face();
-				KC3TimerManager._exped[1].face();
-				KC3TimerManager._exped[2].face();
-			}
-
 			// Clear status reminder coloring
 			$(".module.status .status_text").removeClass("good");
 			$(".module.status .status_text").removeClass("bad");
@@ -1132,24 +1249,33 @@
 
 				// STATUS: TAIHA
 				if( (FleetSummary.hasTaiha || FleetSummary.badState[2])
-					&& !FleetSummary.taihaIndexes.equals([0]) // if not flagship only
-					&& !FleetSummary.taihaIndexes.equals([0,0]) // if not flagship only for combined
+					&& !(selectedFleet==5 && 
+						(FleetSummary.taihaIndexes.equals([0]) || 
+						 FleetSummary.taihaIndexes.equals([0,0]))
+					) // if not flagship only for combined fleet
 					&& !KC3SortieManager.isPvP() // if PvP, no taiha alert
 				){
 					$(".module.status .status_repair .status_text").text( KC3Meta.term(
 						(FleetSummary.badState[2] ? "PanelFSTaiha" : "PanelHasTaiha")
 					) );
-					$(".module.status .status_repair img").attr("src", "../../../../assets/img/ui/sunk.png");
+					$(".module.status .status_repair img").attr("src", "../../../../assets/img/ui/" +
+						(FleetSummary.badState[2] ? "estat_bossheavy.png" : "sunk.png")
+					);
+					$(".module.status .status_repair .status_text").attr("title", "");
 					$(".module.status .status_repair .status_text").addClass("bad");
-
-				// Escort Chuuha
+				// Flagship Chuuha or worse for Combined Fleet only
 				}else if (FleetSummary.badState[3]) {
-					$(".module.status .status_repair .status_text").text( KC3Meta.term("PanelEscortChuuha") );
+					$(".module.status .status_repair .status_text").text( KC3Meta.term("PanelCombinedFSChuuha") );
+					$(".module.status .status_repair .status_text").attr("title", KC3Meta.term("PanelCombinedFSChuuhaTip"));
 					$(".module.status .status_repair .status_text").addClass("bad");
-					$(".module.status .status_repair img").attr("src", "../../../../assets/img/ui/sunk.png");
+					$(".module.status .status_repair img").attr("src", "../../../../assets/img/ui/" +
+						(FleetSummary.badState[2] ? "estat_bossheavy.png" : "estat_bossmodrt.png")
+					);
+				// Condition Green
 				}else{
 					$(".module.status .status_repair .status_text").text( KC3Meta.term("PanelNoTaiha") );
 					$(".module.status .status_repair img").attr("src", "../../../../assets/img/ui/check.png");
+					$(".module.status .status_repair .status_text").attr("title", "");
 					$(".module.status .status_repair .status_text").addClass("good");
 				}
 
@@ -1199,80 +1325,111 @@
 				$(".module.status").hide();
 			}
 
-			// TAIHA ALERT CHECK
-			if (
-				PlayerManager.fleets
-					.filter (function(  x,  i) {
-						var
-							cf = PlayerManager.combinedFleet, // Marks combined flag
-							fs = KC3SortieManager.fleetSent,  // Which fleet that requires to focus out
-							so = KC3SortieManager.onSortie;   // Is it on sortie or not? if not, focus all fleets.
-						return !so || ((cf&&fs===1) ? (i <= 1) : (i == fs-1));
-					})
-					.map    (function(  fldat) { return fldat.ships; })
-					.reduce (function(  x,  y) { return x.concat(y); })
-					.filter (function( shipId) { return shipId >= 0; })
-					.map    (function( shipId) { return KC3ShipManager.get(shipId); })
-					.some   (function( shpDat) {
-						return !shpDat.didFlee && shpDat.isTaiha();
-					})
-			) {
-				if (!ConfigManager.alert_taiha_pvp && KC3SortieManager.isPvP()) {
-					// if PvP and config for PvP is disabled, do nothing
-
-				} else if(ConfigManager.alert_taiha){
-
-					if(ConfigManager.alert_taiha_panel){
-						$("#critical").show();
-						if(critAnim){ clearInterval(critAnim); }
-						critAnim = setInterval(function() {
-							$("#critical").toggleClass("anim2");
-						}, 500);
+		},
+		
+		Lbas :function(){
+			if (selectedFleet == 6) {
+				$(".shiplist_single").empty();
+				$(".shiplist_single").hide();
+				$(".shiplist_combined_fleet").empty();
+				$(".shiplist_combined").hide();
+				$(".airbase_list").empty();
+				$(".airbase_list").show();
+				
+				var baseBox, planeBox, itemObj, paddedId,
+					eqImgSrc, eqIconSrc, eqChevSrc, eqMorale, eqCondSrc,
+					shipObj, afpLower;
+				
+				$.each(PlayerManager.bases, function(i, baseInfo){
+					if (baseInfo.rid != -1) {
+						console.log("AIRBASE", i, baseInfo);
+						baseBox = $("#factory .airbase").clone();
+						$(".base_name", baseBox).html(baseInfo.name);
+						$(".base_range .base_stat_value", baseBox).html(baseInfo.range);
+						$(".base_action", baseBox).html([
+							KC3Meta.term("LandBaseActionWaiting"),
+							KC3Meta.term("LandBaseActionSortie"),
+							KC3Meta.term("LandBaseActionDefend"),
+							KC3Meta.term("LandBaseActionRetreat"),
+							KC3Meta.term("LandBaseActionRest")
+						][baseInfo.action]);
+						
+						shipObj = new KC3Ship();
+						shipObj.rosterId = -1;
+						shipObj.items = baseInfo.planes.map(function(planeInfo){
+							return planeInfo.api_state == 1 ? planeInfo.api_slotid : -1;
+						});
+						shipObj.slots = baseInfo.planes.map(function(planeInfo){
+							return planeInfo.api_state == 1 ? planeInfo.api_count : 0;
+						});
+						
+						afpLower = shipObj.fighterBounds()[0];
+						if (afpLower > 0) {
+							$(".base_afp .base_stat_value", baseBox).html(shipObj.fighterBounds()[0]+"+");
+						} else {
+							$(".base_afp .base_stat_value", baseBox).html( KC3Meta.term("None") );
+						}
+						
+						$(".base_ifp .base_stat_value", baseBox).html(shipObj.interceptionPower("aa"));
+						$(".base_ibp .base_stat_value", baseBox).html(shipObj.interceptionPower("dv"));
+						
+						$.each(baseInfo.planes, function(i, planeInfo){
+							planeBox = $("#factory .airbase_plane").clone();
+							
+							if (planeInfo.api_state !== 0) {
+								console.log("PLANE", i, planeInfo);
+								
+								itemObj = KC3GearManager.get(planeInfo.api_slotid);
+								
+								$(".base_plane_name", planeBox).text(itemObj.name());
+								
+								paddedId = (itemObj.masterId<10?"00":itemObj.masterId<100?"0":"")+itemObj.masterId;
+								eqImgSrc = "../../../../assets/img/planes/"+paddedId+".png";
+								$(".base_plane_img img", planeBox).attr("src", eqImgSrc);
+								$(".base_plane_img", planeBox).attr("title", $(".base_plane_name", planeBox).text());
+								
+								eqIconSrc = "../../../../assets/img/items/"+itemObj.master().api_type[3]+".png";
+								$(".base_plane_icon img", planeBox).attr("src", eqIconSrc);
+								
+								if (itemObj.ace > -1) {
+									eqChevSrc = "../../../../assets/img/client/achev/"+itemObj.ace+".png";
+									$(".base_plane_chevs img", planeBox).attr("src", eqChevSrc);
+								} else {
+									$(".base_plane_chevs img", planeBox).remove();
+								}
+								
+								if (planeInfo.api_state == 1) {
+									// Plane on standby
+									eqMorale = ["","3","2","1"][planeInfo.api_cond];
+									eqCondSrc = "../../../../assets/img/client/morale/"+eqMorale+".png";
+									$(".base_plane_count", planeBox).text(planeInfo.api_count+" / "+planeInfo.api_max_count);
+									$(".base_plane_cond img", planeBox).attr("src", eqCondSrc);
+									
+									if (planeInfo.api_count < planeInfo.api_max_count) {
+										$(".base_plane_count", planeBox).addClass("unsupplied");
+									} else {
+										$(".base_plane_count", planeBox).removeClass("unsupplied");
+									}
+									
+								} else if (planeInfo.api_state == 2) {
+									// Plane moving
+									planeBox.addClass("moving");
+									$(".base_plane_count", planeBox).text("");
+									$(".base_plane_cond img", planeBox).remove();
+								}
+								
+							} else {
+								// No plane on slot
+								$("div", planeBox).remove();
+							}
+							
+							$(".base_planes", baseBox).append(planeBox);
+						});
+						
+						$(".module.fleet .airbase_list").append(baseBox);
 					}
-
-					if(ConfigManager.alert_taiha_sound){
-						critSound.play();
-					}
-
-
-					(new RMsg("service", "taihaAlertStart", {
-						tabId: chrome.devtools.inspectedWindow.tabId
-					})).execute();
-				}
-			} else {
-				if(critAnim){ clearInterval(critAnim); }
-				$("#critical").hide();
-				critSound.pause();
-
-				(new RMsg("service", "taihaAlertStop", {
-					tabId: chrome.devtools.inspectedWindow.tabId
-				})).execute();
+				});
 			}
-
-
-			// FLEET BUTTONS RESUPPLY STATUSES
-			$(".module.controls .fleet_num").each(function(i, element){
-				$(element).removeClass("needsSupply");
-				$(element).removeClass("hasTaiha");
-				if(!$(element).hasClass("active")){
-					if(!PlayerManager.fleets[i].isSupplied()){
-						$(element).addClass("needsSupply");
-					}
-					if(PlayerManager.fleets[i].hasTaiha()){
-						$(element).addClass("hasTaiha");
-					}
-				}
-			});
-
-			// whether this update is triggered because of sending expeditions
-			if (expeditionStarted && ConfigManager.info_auto_exped_tab) {
-				// clear flag
-				expeditionStarted = false;
-
-				// we'll try switching to the next available fleet if any
-				ExpedTabAutoFleetSwitch(false);
-			}
-			NatsuiroListeners.UpdateExpeditionPlanner();
 		},
 
 		SortieStart: function(data){
@@ -1435,7 +1592,7 @@
 					var eSlot = thisNode.eSlot[index];
 					if (!!eSlot && eSlot.length > 0) {
 						for(var slotIdx=0; slotIdx<Math.min(eSlot.length,4); slotIdx++) {
-							if(eSlot[slotIdx] > -1) tooltip += "\n" + KC3Meta.gearName(KC3Master.slotitem(eSlot[slotIdx]).api_name);
+							if(eSlot[slotIdx] > 0) tooltip += "\n" + KC3Meta.gearName(KC3Master.slotitem(eSlot[slotIdx]).api_name);
 						}
 					}
 
@@ -1705,7 +1862,7 @@
 					$(".activity_crafting .equipNote").html( KC3Meta.term("CraftEquipNoteExists").format(countExisting) );
 				}
 
-				$(".activity_crafting .equipStats").html("");
+				$(".activity_crafting .equipStats").empty();
 				CraftGearStats(MasterItem, "souk", "ar");
 				CraftGearStats(MasterItem, "houg", "fp");
 				CraftGearStats(MasterItem, "raig", "tp");
@@ -1723,8 +1880,8 @@
 			} else {
 				$(".activity_crafting .equipIcon img").attr("src", icon);
 				$(".activity_crafting .equipName").text( KC3Meta.term("CraftEquipNotePenguin") );
-				$(".activity_crafting .equipNote").html("");
-				$(".activity_crafting .equipStats").html("");
+				$(".activity_crafting .equipNote").empty();
+				$(".activity_crafting .equipStats").empty();
 			}
 
 			// Show resource used
@@ -1831,7 +1988,7 @@
 					var eSlot = thisPvP.eSlot[index];
 					if (!!eSlot && eSlot.length > 0) {
 						for(var slotIdx=0; slotIdx<Math.min(eSlot.length,4); slotIdx++) {
-							if(eSlot[slotIdx] > -1) tooltip += "\n" + KC3Meta.gearName(KC3Master.slotitem(eSlot[slotIdx]).api_name);
+							if(eSlot[slotIdx] > 0) tooltip += "\n" + KC3Meta.gearName(KC3Master.slotitem(eSlot[slotIdx]).api_name);
 						}
 					}
 
