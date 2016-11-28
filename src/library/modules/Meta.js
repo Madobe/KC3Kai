@@ -29,6 +29,8 @@ Provides access to data on built-in JSON files
 		},
 		_tpmult:{},
 		_edges:{},
+		_nodes:{},
+		_gunfit:{},
 		_defaultIcon:"",
 		
 		voiceDiffs: [
@@ -69,7 +71,9 @@ Provides access to data on built-in JSON files
 			this._gauges	= JSON.parse( $.ajax(repo+'gauges.json', { async: false }).responseText );
 			this._defeq		= JSON.parse( $.ajax(repo+'defeq.json', { async: false }).responseText );
 			this._edges		= JSON.parse( $.ajax(repo+'edges.json', { async: false }).responseText );
+			this._nodes		= JSON.parse( $.ajax(repo+'nodes.json', { async: false }).responseText );
 			this._tpmult	= JSON.parse( $.ajax(repo+'tp_mult.json', { async: false }).responseText );
+			this._gunfit	= JSON.parse( $.ajax(repo+'gunfit.json', { async: false }).responseText );
 			
 			// Load Translations
 			this._ship 		= KC3Translation.getJSON(repo, 'ships', true);
@@ -268,6 +272,22 @@ Provides access to data on built-in JSON files
 			return edgeId;
 		},
 		
+		nodeLetters : function(worldId, mapId) {
+			var map = this._nodes["World " + worldId + "-" + mapId];
+			if (typeof map !== "undefined" && !!map.letters) {
+				return map.letters;
+			}
+			return {};
+		},
+		
+		nodeMarkers : function(worldId, mapId) {
+			var map = this._nodes["World " + worldId + "-" + mapId];
+			if (typeof map !== "undefined" && !!map.markers) {
+				return map.markers;
+			}
+			return [];
+		},
+		
 		tpObtained : function(kwargs) {
 			function addTP(tp) {
 				var args = [].slice.call(arguments,1);
@@ -399,6 +419,22 @@ Provides access to data on built-in JSON files
 				}
 			}
 			return false;
+		},
+		
+		gunfit :function(shipMstId, itemMstId){
+			if (typeof this._gunfit[shipMstId+""] == "undefined") {
+				return false;
+			}
+			
+			if (typeof itemMstId != "undefined") {
+				if (typeof this._gunfit[shipMstId+""][itemMstId+""] != "undefined") {
+					return this._gunfit[shipMstId+""][itemMstId+""];
+				} else {
+					return false;
+				}
+			} else {
+				return this._gunfit[shipMstId+""];
+			}
 		}
 	};
 	
