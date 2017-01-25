@@ -13,16 +13,26 @@ Retreives when needed to apply on components
 		// Default values. As a function to not include on JSON string
 		defaults : function(){
 			return {
-				version				: 8,
-				language			: "en",
+				version     		: 8,
+				language    		: "en",
+				hqInfoPage  		: 1,
 				elosFormula 		: 4,
+				aaFormation 		: 1,
+				imaginaryEnemySlot	: 96,
 				hqExpDetail 		: 1,
+				rankPtsMode 		: 1,
 				timerDisplayType	: 1,
 				marryLevelFormat	: 0,
 				checkLiveQuests		: true,
 				devOnlyPages		: false,
-				forceDMMLogin       : false,
-				apiRecorder         : false,
+				forceDMMLogin		: false,
+				apiRecorder			: false,
+				updateNotification	: 2,
+
+				showCatBombs		: true,
+				showApiError		: true,
+				repeatApiError		: true,
+				detailedApiError	: true,
 
 				DBSubmission_enabled: 0,
 				DBSubmission_key : '',
@@ -50,7 +60,8 @@ Retreives when needed to apply on components
 				info_troll 			: false,
 
 				// AIR PROFICIENCY BONUSES (Configurable by user)
-				air_formula			: 3, // 1=no veteran 2=veteran average 3=veteran bounds
+				// 1=no veteran 2=veteran average 3=veteran bounds 4=configurable, but unused yet
+				air_formula			: 3,
 				air_average			: {
 					"6":  [0, 1.35, 3.5, 7.1, 11.4, 16.8, 17, 25],
 					"7":  [0,    1,	  1,   1,    2,	   2,  2,  3],
@@ -58,7 +69,8 @@ Retreives when needed to apply on components
 					"11": [0,    1,	  1,   3,    3,	   7,  7,  9],
 					"45": [0, 1.35, 3.5, 7.1, 11.4, 16.8, 17, 25],
 					"47": [0, 1.35, 3.5, 7.1, 11.4, 16.8, 17, 25],
-					"48": [0, 1.35, 3.5, 7.1, 11.4, 16.8, 17, 25]
+					"48": [0, 1.35, 3.5, 7.1, 11.4, 16.8, 17, 25],
+					"57": [0,    1,	  1,   3,    3,	   7,  7,  9]
 				},
 				air_bounds			: {
 					"6": [
@@ -95,7 +107,12 @@ Retreives when needed to apply on components
 						[0.026, 0.845], // 0
 						[1, 1.715], [3.212, 3.984], [6.845, 7.504], // 3
 						[11.205, 11.786], [16.639, 17], [16.999, 17.205], [24.679, 25.411] // 7
-					]
+					],
+					"57": [  // jet fighter-bomber
+						[0,0], // 0
+						[0,1], [0,1], [0,1], // 3
+						[1,2], [1,2], [1,2], [1,3]	// 7
+					]  // assumed to be equivalent to regular bombers unless proved otherwise
 				},
 				
 				salt_list 		: new KC3ShipMasterList(),
@@ -175,9 +192,9 @@ Retreives when needed to apply on components
         
 		// Reset value of a specific key to the current default value
 		resetValueOf: function(key) {
+			ConfigManager.loadIfNecessary();
 			this[key] = this.defaults()[key];
-			console.log( "key is " + key);
-			console.log( "new value is " + JSON.stringify( this[key] ));
+			console.log( "reset key", key, " to default:", JSON.stringify(this[key]) );
 			this.save();
 		},
 		
@@ -214,32 +231,72 @@ Retreives when needed to apply on components
 				this.resetValueOf('language');
 		},
 		
+		loadIfNecessary : function(){
+			var currentConfig = JSON.stringify(this);
+			if(currentConfig !== localStorage.config){
+				this.load();
+			}
+		},
+		
 		// Save current config onto localStorage
 		save : function(){
-			// console.log(this);
 			localStorage.config = JSON.stringify(this);
+		},
+		
+		// Toggle HQ Info Page
+		scrollHqInfoPage :function(){
+			this.loadIfNecessary();
+			this.hqInfoPage = (this.hqInfoPage % 3) + 1;
+			this.save();
 		},
 		
 		// Toggle Equipment LoS
 		scrollElosMode :function(){
+			this.loadIfNecessary();
 			this.elosFormula = (this.elosFormula % 4) + 1;
 			this.save();
 		},
 		
 		// Toggle Fighter Power
 		scrollFighterPowerMode :function(){
+			this.loadIfNecessary();
 			this.air_formula = (this.air_formula % 3) + 1;
+			this.save();
+		},
+		
+		// Toggle AntiAir Formation Type
+		// Only loop between frequently used (different modifiers):
+		// Line Ahead / Double Line / Diamond / C anti-sub / C diamond / C battle
+		scrollAntiAirFormation :function(isCombined){
+			this.loadIfNecessary();
+			this.aaFormation += 1;
+			if(!!isCombined){
+				if(this.aaFormation == 4) this.aaFormation = 11;
+				if(this.aaFormation == 12) this.aaFormation = 13;
+				if(this.aaFormation == 15) this.aaFormation = 1;
+			} else {
+				this.aaFormation = this.aaFormation > 3 ? 1 : this.aaFormation;
+			}
 			this.save();
 		},
 		
 		// Toggle HQ Exp Information
 		scrollHQExpInfo :function(){
+			this.loadIfNecessary();
 			this.hqExpDetail = (this.hqExpDetail % 3) + 1;
+			this.save();
+		},
+		
+		// Toggle Rank Title vs Rank Points
+		scrollRankPtsMode :function(){
+			this.loadIfNecessary();
+			this.rankPtsMode = (this.rankPtsMode % 2) + 1;
 			this.save();
 		},
 		
 		// Toggle repair timer type
 		scrollTimerType :function(){
+			this.loadIfNecessary();
 			this.timerDisplayType = (this.timerDisplayType % 2) + 1;
 			this.save();
 		}

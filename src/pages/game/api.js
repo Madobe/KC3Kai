@@ -48,20 +48,6 @@ function ActivateGame(){
 }
 
 $(document).on("ready", function(){
-	// Chrome 54 incompatibilities
-	if (parseInt(getChromeVersion(), 10) >= 54) {
-		if(typeof localStorage.read_api_notice == "undefined") {
-			$("#chrome54flash").show();
-		}
-	}
-	
-	// Chrome 55 incompatibilities
-	if (parseInt(getChromeVersion(), 10) >= 55) {
-		if(typeof localStorage.read_api_notice_55 == "undefined") {
-			$("#chrome55network").show();
-		}
-	}
-	
 	// Initialize data managers
 	ConfigManager.load();
 	KC3Master.init();
@@ -157,9 +143,18 @@ $(document).on("ready", function(){
 	
 	// Quick Play
 	$(".play_btn").on('click', function(){
-		if($(this).data('play'))
-			ActivateGame();
+		ActivateGame();
 	});
+	
+	// Disable Quick Play (must panel)
+	if(ConfigManager.api_mustPanel) {
+		$(".play_btn")
+			.off("click")
+			.attr("disabled", "disabled")
+			.text(KC3Meta.term("APIWaitToggle"))
+			.css("color", "#777")
+			.css('width', "40%");
+	}
 	
 	// I've read the Chrome 54 API Link notice
 	$("#chrome54flash .api_notice_close").on('click', function(){
@@ -172,8 +167,6 @@ $(document).on("ready", function(){
 		localStorage.read_api_notice_55 = 1;
 		$("#chrome55network").hide();
 	});
-	
-	$(".play_btn").data('play',!ConfigManager.api_mustPanel);
 	
 	// untranslated quest copiable text form
 	$(".overlay_quests").on("click", ".no_tl", function(){
@@ -208,7 +201,7 @@ $(document).on("ready", function(){
 	
 	// Exit confirmation
 	window.onbeforeunload = function(){
-		ConfigManager.load();
+		ConfigManager.loadIfNecessary();
 		// added waiting condition should be ignored
 		if(
 			ConfigManager.api_askExit==1 &&
@@ -467,7 +460,6 @@ var interactions = {
 	
 	// Taiha Alert Start
 	taihaAlertStart :function(request, sender, response, callback){
-		ConfigManager.load();
 		taihaStatus = true;
 		
 		if(ConfigManager.alert_taiha_blur) {
@@ -606,14 +598,10 @@ chrome.runtime.onMessage.addListener(function(request, sender, response){
 	if((request.identifier||"") == "kc3_gamescreen"){
 		// If action requested is supported
 		if(typeof interactions[request.action] !== "undefined"){
+			ConfigManager.loadIfNecessary();
 			// Execute the action
 			interactions[request.action](request, sender, response);
 			return true;
 		}
 	}
 });
-
-function getChromeVersion() {
-	var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
-	return raw ? parseInt(raw[2], 10) : false;
-}

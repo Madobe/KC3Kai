@@ -70,6 +70,45 @@
 				"id": "apiRecorder",
 				"name": "SettingsAPIRecorder",
 				"type": "check"
+			},
+			{
+				"id": "updateNotification",
+				"name": "SettingsUpdateNotification",
+				"type": "radio",
+				"options" : {
+					"choices" : [
+						[ 1, "SettingsUpdateNotifNone" ],
+						[ 2, "SettingsUpdateNotifPage" ],
+						[ 3, "SettingsUpdateNotifPop" ]
+					]
+				}
+			}
+		]
+	},
+	{
+		"section": "SettingsErrors",
+		"help" : "",
+		"contents" : [
+			{
+				"id": "showCatBombs",
+				"name": "SettingsShowCatBombs",
+				"type": "check"
+			},
+			{
+				"id": "showApiError",
+				"name": "SettingsShowAPIError",
+				"type": "check",
+				"disabled": true
+			},
+			{
+				"id": "repeatApiError",
+				"name": "SettingsRepeatAPIError",
+				"type": "check"
+			},
+			{
+				"id": "detailedApiError",
+				"name": "SettingsDetailedAPIError",
+				"type": "check"
 			}
 		]
 	},
@@ -230,6 +269,31 @@
 				"name" : "SettingsAFPBounds",
 				"type" : "json",
 				"options" : {}
+			},
+			{
+				"id" : "aaFormation",
+				"name" : "SettingsAAFormation",
+				"type" : "radio",
+				"options" : {
+					"choices" : [
+						[ 1, "SettingsAAFLineAheadEtc" ],
+						[ 2, "SettingsAAFDoubleLine" ],
+						[ 3, "SettingsAAFDiamond" ],
+						[ 11, "SettingsAAFCombAntiSub" ],
+						[ 13, "SettingsAAFCombDiamond" ]
+					]
+				}
+			},
+			{
+				"id" : "imaginaryEnemySlot",
+				"name" : "SettingsImaginaryEnemySlot",
+				"type" : "small_text",
+				"bound" : {
+					"min" :  0,
+					"max" : 255,
+					"type": "Integer"
+				},
+				"options" : { "label" : "" }
 			}
 		]
 	},
@@ -267,7 +331,7 @@
 				"bound" : {
 					"min" : 0,
 					"max" :  100,
-					"type": "Number"
+					"type": "Integer"
 				},
 				"options" : { "label" : "%" }
 			},
@@ -294,7 +358,7 @@
 	},
 	{
 		"section": "SettingsAlerts",
-		"help" : "https://github.com/dragonjet/KC3Kai/wiki/Settings%3A-Alerts",
+		"help" : "https://github.com/KC3Kai/KC3Kai/wiki/Settings%3A-Alerts",
 		"contents" : [
 			{
 				"id" : "alert_diff",
@@ -303,7 +367,7 @@
 				"bound" : {
 					"min" : -300,
 					"max" :  300,
-					"type": "Number"
+					"type": "Integer"
 				},
 				"options" : { "label" : "SettingsSeconds" }
 			},
@@ -320,7 +384,7 @@
 				"bound" : {
 					"min" :  1,
 					"max" : 49,
-					"type": "Number"
+					"type": "Integer"
 				},
 				"options" : { "label" : "" }
 			},
@@ -332,7 +396,7 @@
 					"min" : 0,
 					"length_min" : 1,
 					"length_max" : 1,
-					"type": "Number"
+					"type": "Integer"
 				},
 				"options" : { "label" : "SettingsSupplyBarLabel" }
 			},
@@ -394,7 +458,7 @@
 	},
 	{
 		"section": "SettingsTaihaAlert",
-		"help" : "https://github.com/dragonjet/KC3Kai/wiki",
+		"help" : "https://github.com/KC3Kai/KC3Kai/wiki",
 		"contents" : [
 			{
 				"id" : "alert_taiha",
@@ -436,7 +500,7 @@
 	},
 	{
 		"section": "SettingsAPIGameScreen",
-		"help" : "https://github.com/dragonjet/KC3Kai/wiki/Settings%3A-Screen",
+		"help" : "https://github.com/KC3Kai/KC3Kai/wiki/Settings%3A-Screen",
 		"contents" : [
 			{
 				"id" : "api_translation",
@@ -539,9 +603,9 @@
 				"name" : "SettingsSubtitleSize",
 				"type" : "small_text",
 				"bound" : {
-					"min" :  10,
+					"min" : 10,
 					"max" : 50,
-					"type": "Number"
+					"type": "Integer"
 				},
 				"options" : {
 					"label" : "px"
@@ -706,7 +770,7 @@
 	},
 	{
 		"section": "Panel",
-		"help" : "https://github.com/dragonjet/KC3Kai/wiki/Settings%3A-Panel",
+		"help" : "https://github.com/KC3Kai/KC3Kai/wiki/Settings%3A-Panel",
 		"contents" : [
 			{
 				"id" : "pan_theme",

@@ -55,7 +55,7 @@
 		Prepares latest in game data
 		---------------------------------*/
 		reload :function(){
-			// None for ship library
+			ConfigManager.load();
 		},
 		
 		/* EXECUTE
@@ -90,7 +90,7 @@
 
 			// List all ships
 			var shipBox;
-			$.each(KC3Master.all_ships(), function(index, ShipData){
+			$.each(KC3Master.all_ships(true, true), function(index, ShipData){
 				if(!ShipData) { return true; }
 				
 				shipBox = $(".tab_mstship .factory .shipRecord").clone();
@@ -174,6 +174,7 @@
 			if(!ConfigManager.dismissed_hints.cg_notice){
 				$(".cg_notes").show();
 				$(".cg_notes").on("click", function(e){
+					ConfigManager.loadIfNecessary();
 					ConfigManager.dismissed_hints.cg_notice = true;
 					ConfigManager.save();
 					// To keep URL for copying, do not disappear
@@ -277,7 +278,7 @@
 			console.debug("shipData", shipData);
 			if(!shipData) { return; }
 			
-			$(".tab_mstship .shipInfo .name").text( "[{0}] {1} {2}".format(ship_id, KC3Meta.shipName(shipData.api_name), KC3Meta.shipName(shipData.api_yomi) ) );
+			$(".tab_mstship .shipInfo .name").text( "[{0}] {1} {2}".format(ship_id, KC3Meta.shipName(shipData.api_name), KC3Meta.shipReadingName(shipData.api_yomi) ) );
 			$(".tab_mstship .shipInfo .type").text( "{0}".format(KC3Meta.stype(shipData.api_stype)) );
 			
 			// CG VIEWER
@@ -495,6 +496,47 @@
 					$("<div/>").addClass("clear").appendTo(".tab_mstship .shipInfo .hourlies");
 				}
 				
+				// AACI Types
+				$(".aaciList").empty();
+				var aaciList = AntiAir.sortedPossibleAaciList( AntiAir.shipAllPossibleAACIs(shipData) );
+				if (aaciList.length > 0) {
+					var aaciBox, equipIcon, i;
+					$.each(aaciList, function(idx, aaciObj){
+						aaciBox = $(".tab_mstship .factory .aaciPattern").clone();
+						$(".apiId", aaciBox).text("[{0}]".format(aaciObj.id));
+						if(aaciObj.icons[0] > 0) {
+							$(".shipIcon img", aaciBox)
+								.attr("src", KC3Meta.shipIcon(aaciObj.icons[0]) )
+								.attr("title", KC3Meta.aacitype(aaciObj.id)[0] || "");
+						} else {
+							$(".shipIcon img", aaciBox).hide();
+						}
+						if(aaciObj.icons.length > 1) {
+							for(i = 1; i < aaciObj.icons.length; i++) {
+								equipIcon = String(aaciObj.icons[i]).split(/[+-]/);
+								$("<img/>")
+									.attr("src", "../../../../assets/img/items/"+equipIcon[0]+".png")
+									.attr("title", KC3Meta.aacitype(aaciObj.id)[i] || "")
+									.appendTo($(".equipIcons", aaciBox));
+								if(equipIcon.length>1) {
+									$('<img/>')
+										.attr("src", "../../../../assets/img/items/"+equipIcon[1]+".png")
+										.addClass(aaciObj.icons[i].indexOf("-")>-1 ? "minusIcon" : "plusIcon")
+										.appendTo($(".equipIcons", aaciBox));
+								}
+							}
+						}
+						$(".fixed", aaciBox).text("+{0}".format(aaciObj.fixed));
+						$(".modifier", aaciBox).text("x{0}".format(aaciObj.modifier));
+						aaciBox.toggleClass("odd", (idx+1) % 2 !== 0);
+						aaciBox.toggleClass("even", (idx+1) % 2 === 0);
+						aaciBox.appendTo(".aaciList");
+					});
+					$(".aaci").show();
+				} else {
+					$(".aaci").hide();
+				}
+				
 				// GUN FITS
 				$(".gunfitList").empty();
 				var gunfits = KC3Meta.gunfit(shipData.api_id);
@@ -574,7 +616,8 @@
 							$("img", statBox).attr("src", "../../../../assets/img/stats/"+stat[0]+".png");
 							$(".ship_stat_name", statBox).text(stat[1]);
 							if(stat[0]=="sp"){
-								$(".ship_stat_text", statBox).text({"0":"Land","5":"Slow","10":"Fast"}[shipData.api_soku]);
+								var speedEnNameMap = {"0":"Land","5":"Slow","10":"Fast","15":"Fast+","20":"Fastest"};
+								$(".ship_stat_text", statBox).text(speedEnNameMap[shipData.api_soku]);
 								$(".ship_stat_text", statBox).show();
 								$(".ship_stat_value", statBox).hide();
 							} else {
@@ -622,6 +665,7 @@
 				$(".tab_mstship .shipInfo .hourlies").hide();
 				$(".tab_mstship .shipInfo .intro").hide();
 				$(".tab_mstship .shipInfo .more").hide();
+				$(".tab_mstship .shipInfo .aaci").hide();
 				$(".tab_mstship .shipInfo .gunfit").hide();
 				$(".tab_mstship .shipInfo .tokubest").hide();
 			} else {
@@ -636,6 +680,7 @@
 				$(".tab_mstship .shipInfo .hourlies").hide();
 				$(".tab_mstship .shipInfo .intro").hide();
 				$(".tab_mstship .shipInfo .more").hide();
+				$(".tab_mstship .shipInfo .aaci").hide();
 				$(".tab_mstship .shipInfo .gunfit").hide();
 				$(".tab_mstship .shipInfo .tokubest").hide();
 			}

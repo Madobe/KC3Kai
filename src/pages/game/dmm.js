@@ -59,6 +59,7 @@ function ActivateGame(){
 		.attr("src", "http://www.dmm.com/netgame/social/-/gadgets/=/app_id=854854/")
 		.end()
 		.show();
+	$(".box-wrap").css("zoom", ((ConfigManager.api_gameScale || 100) / 100));
 	idleTimer = setInterval(idleFunction,1000);
 	if(ConfigManager.alert_idle_counter) {
 		$(".game-idle-timer").trigger("refresh-tick");
@@ -66,13 +67,6 @@ function ActivateGame(){
 }
 
 $(document).on("ready", function(){
-	// Chrome 55 incompatibilities
-	if (parseInt(getChromeVersion(), 10) >= 55) {
-		if(typeof localStorage.read_dmm_notice_55 == "undefined") {
-			$("#chrome55frame").show();
-		}
-	}
-	
 	// Initialize data managers
 	ConfigManager.load();
 	KC3Master.init();
@@ -115,7 +109,8 @@ $(document).on("ready", function(){
 					top: "auto",
 					bottom: "auto",
 					right: "auto",
-					width: $(".box-game").width()
+					width: $(".box-game").width(),
+					zoom: ((ConfigManager.api_gameScale || 100) / 100)
 				});
 				break;
 			case "stick":
@@ -146,9 +141,10 @@ $(document).on("ready", function(){
 	if(ConfigManager.api_mustPanel) {
 		$(".play_btn")
 			.off('click')
+			.attr("disabled", "disabled")
 			.text(KC3Meta.term("APIWaitToggle"))
-			.css('color','#f00')
-			.css('width','40%');
+			.css("color", "#777")
+			.css('width', "40%");
 	}
 	
 	// Configure Refresh Toggle (using $(".game-refresh").trigger("click") is possible)
@@ -509,7 +505,6 @@ var interactions = {
 	
 	// Taiha Alert Start
 	taihaAlertStart :function(request, sender, response, callback){
-		ConfigManager.load();
 		taihaStatus = true;
 		
 		if(ConfigManager.alert_taiha_blur) {
@@ -653,14 +648,10 @@ chrome.runtime.onMessage.addListener(function(request, sender, response){
 	if((request.identifier||"") == "kc3_gamescreen"){
 		// If action requested is supported
 		if(typeof interactions[request.action] !== "undefined"){
+			ConfigManager.loadIfNecessary();
 			// Execute the action
 			interactions[request.action](request, sender, response);
 			return true;
 		}
 	}
 });
-
-function getChromeVersion() {
-	var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
-	return raw ? parseInt(raw[2], 10) : false;
-}
