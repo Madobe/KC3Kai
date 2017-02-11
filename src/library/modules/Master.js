@@ -123,7 +123,7 @@ Saves and loads significant data for future use
 					as = this._abyssalShips[id];
 					if(!!ss && !!as){
 						for(var k in as){
-							if(!ss.hasOwnProperty(k))
+							if(k !== "api_id" && !ss.hasOwnProperty(k))
 								ss[k] = as[k];
 						}
 					}
@@ -189,6 +189,13 @@ Saves and loads significant data for future use
 
 		all_useitems :function(){
 			return this._raw.useitem || {};
+		},
+
+		abyssalShip :function(id, isMasterMerged){
+			var master = !!isMasterMerged && id > 500 && $.extend({}, this.ship(id)) || {};
+			return Object.keys(master).length === 0 &&
+				(Object.keys(this._abyssalShips).length === 0 || !this._abyssalShips[id]) ?
+				false : $.extend(master, this._abyssalShips[id]);
 		},
 
 		/* Save to localStorage

@@ -352,7 +352,7 @@
 		this.showPage = function(){
 			var self = this;
 			$(".tab_"+tabCode+" .pagination").hide();
-			$(".tab_"+tabCode+" .sortie_list").html("");
+			$(".tab_"+tabCode+" .sortie_list").empty();
 			
 			// Show all sorties
 			if(this.selectedWorld === 0){
@@ -493,6 +493,11 @@
 								return true;
 							}
 							var airRaidLostKind = (battle.airRaid || {}).api_lost_kind;
+							var baseTotalDamage = battle.airRaid && battle.airRaid.api_air_base_attack
+									&& battle.airRaid.api_air_base_attack.api_stage3
+									&& battle.airRaid.api_air_base_attack.api_stage3.api_fdam ?
+									Math.floor(battle.airRaid.api_air_base_attack.api_stage3.api_fdam.slice(1).reduce(function(a,b){return a+b;},0))
+								: 0;
 							
 							battle.shizunde |= [[],[]];
 							
@@ -505,6 +510,11 @@
 							$(".node_id", nodeBox).text( KC3Meta.nodeLetter( sortie.world, sortie.mapnum, battle.node ) );
 							if(airRaidLostKind > 0){
 								$(".node_id", nodeBox).addClass(airRaidLostKind === 4 ? "nodamage" : "damaged");
+								// Show Enemy Air Raid damage
+								if(airRaidLostKind != 4){
+									$(".node_id", nodeBox).attr("title",
+										KC3Meta.term("BattleAirBaseLossTip").format(baseTotalDamage, Math.round(baseTotalDamage * 0.9 + 0.1)));
+								}
 							} else {
 								$(".node_id", nodeBox).removeClass("nodamage damaged");
 							}
@@ -644,6 +654,7 @@
 			});
 			
 			$(".tab_"+tabCode+" .pagination").show();
+			$(".tab_"+tabCode+" .sortie_list").createChildrenTooltips();
 		};
 		
 		function updateScrollItem(worldMap, itemWidth) {
@@ -688,7 +699,6 @@
 			rcanvas.height = 400;
 			var rcontext = rcanvas.getContext("2d");
 			
-			
 			var domImg = new Image();
 			domImg.onload = function(){
 				rcontext.drawImage( domImg, 0, 0, 400, 400, 0, 0, 400, 400 );
@@ -700,7 +710,7 @@
 						return false;
 					}
 					
-					console.log(rcontext,sortieData);
+					console.log("Downloading reply", sortieId, ", data:", sortieData);
 					rcontext.font = "26pt Calibri";
 					rcontext.fillStyle = '#ffffff';
 					rcontext.fillText(sortieData.world+"-"+sortieData.mapnum, 20, 215);
@@ -717,18 +727,26 @@
 					});
 					
 					withDataCover64 = rcanvas.toDataURL("image/png");
-					// window.open(withDataCover64);
 					
-					var newImg = steganography.encode(JSON.stringify(sortieData), withDataCover64);
-					
-					chrome.downloads.download({
-						url: newImg,
-						filename: ConfigManager.ss_directory+'/replay/'+PlayerManager.hq.name+"_"+sortieId+'.png',
-						conflictAction: "uniquify"
-					}, function(downloadId){
-						self.exportingReplay = false;
-						$("body").css("opacity", "1");
+					steg.encode(JSON.stringify(sortieData), withDataCover64, {
+						success: function(newImg){
+							chrome.downloads.download({
+								url: newImg,
+								filename: ConfigManager.ss_directory+'/replay/'+PlayerManager.hq.name+"_"+sortieId+'.png',
+								conflictAction: "uniquify"
+							}, function(downloadId){
+								self.exportingReplay = false;
+								$("body").css("opacity", "1");
+							});
+						},
+						error: function(e){
+							console.error("Failed to encode replay data by", e, e.stack);
+							self.exportingReplay = false;
+							$("body").css("opacity", "1");
+							return false;
+						}
 					});
+					
 				});
 				
 			};

@@ -14,7 +14,7 @@ Quest Type:
 */
 (function(){
 	"use strict";
-	
+
 	window.KC3Quest = function(){
 		this.id = 0;
 		this.type = 0;
@@ -22,7 +22,7 @@ Quest Type:
 		this.progress = 0;
 		this.tracking = false;
 	};
-	
+
 	/* DEFINE
 	Fill object with already-formatted quest data
 	------------------------------------------*/
@@ -33,14 +33,14 @@ Quest Type:
 		if (data.progress) {
 			this.progress = data.progress;
 		} else {
-			this.progress =  0;
+			this.progress =	 0;
 		}
 		if (!this.tracking) {
 			this.tracking = data.tracking;
 		}
 		this.attachMeta();
 	};
-	
+
 	/* DEFINE RAW
 	Fill object with quest data from Raw API response
 	------------------------------------------*/
@@ -50,11 +50,11 @@ Quest Type:
 		this.type = data.api_type;
 		this.progress = data.api_progress_flag;
 		this.attachMeta();
-		
+
 		// Attach temporary raw data for quick reference
 		this.raw = function(){ return data; };
 	};
-	
+
 	/* OUTPUT SHORT
 	Return tracking text to be shown on Panel
 	------------------------------------------*/
@@ -81,7 +81,7 @@ Quest Type:
 		}
 		return "";
 	};
-	
+
 	/* OUTPUT HTML
 	Return tracking text to be shown on Strategy Room
 	------------------------------------------*/
@@ -96,43 +96,54 @@ Quest Type:
 		}
 		return "";
 	};
-	
+
 	/* INCREMENT
 	Add one to tracking progress
 	@param {number} reqNum - index of counter type, mainly for Bw1. Default: 0
 	@param {number} amount - progress amount to be increased. Default: 1
 	@param isAdjustingCounter - if true, prevent recursively inc on specific quest itself
 	------------------------------------------*/
-	KC3Quest.prototype.increment = function(reqNum, amount, isAdjustingCounter){
+	KC3Quest.prototype.increment = function(reqNum=0, amount=1, isAdjustingCounter=false){
 		var self = this;
-		//2 = on progress, or force to be adjusted on shared counter
-		if(this.tracking && (this.status==2 || !!isAdjustingCounter)){
-			if(typeof reqNum == "undefined"){ reqNum=0; }
-			if(typeof amount == "undefined"){ amount=1; }
-			var maxValue = (!!isAdjustingCounter && this.status!=2) ? this.tracking[reqNum][1] - 1 : this.tracking[reqNum][1];
-			if (this.tracking[reqNum][0] + amount <= maxValue) {
-				this.tracking[reqNum][0] += amount;
+		var isIncreased = false;
+		if (! ConfigManager.spCounterAdjust) {
+			if (this.tracking && this.isSelected()) {
+				if (this.tracking[reqNum][0] + amount <= this.tracking[reqNum][1]) {
+					this.tracking[reqNum][0] += amount;
+				}
+				KC3QuestManager.save();
+			}
+			return;
+		}
+
+		// is selected on progress, or force to be adjusted on shared counter
+		if(this.tracking && (this.isSelected() || !!isAdjustingCounter)){
+			// passive adjusted never reach completion
+			var maxValue = !!isAdjustingCounter ? this.tracking[reqNum][1] - 1 : this.tracking[reqNum][1];
+			if (this.tracking[reqNum][0] < maxValue) {
+				isIncreased = true;
+				this.tracking[reqNum][0] += Math.min(amount, maxValue - this.tracking[reqNum][0]);
 			}
 			KC3QuestManager.save();
 		}
 		// Some quests are reported bug-like behavior on progress counter at server-side,
 		// Try to simulate the increment behavior, keep counters the same with in-game's
 		// See PR #1436
-		if(!isAdjustingCounter && Array.isArray(KC3QuestManager.sharedCounterQuests)){
+		if(!isAdjustingCounter && isIncreased && Array.isArray(KC3QuestManager.sharedCounterQuests)){
 			KC3QuestManager.sharedCounterQuests.forEach(function(idList){
 				var ids = Array.apply(null, idList);
 				ids.forEach(function(incId, idx){
 					if(self.id === incId){
 						ids.splice(idx, 1);
 						ids.forEach(function(id){
-							KC3QuestManager.get(id).increment(undefined, undefined, true);
+							KC3QuestManager.get(id).increment(reqNum, amount, true);
 						});
 					}
 				});
 			});
 		}
 	};
-	
+
 	/* ISCOMPLETE
 	Return true iff all of the counters are complete
 	------------------------------------------*/
@@ -140,14 +151,14 @@ Quest Type:
 		if (this.tracking) {
 			for (var ctr in this.tracking) {
 				if (this.tracking[ctr][0] <
-				    this.tracking[ctr][1])
+					this.tracking[ctr][1])
 					return false;
 			}
 			return true;
 		}
 		return false;
 	};
-	
+
 	/* ATTACH META
 	Add reference to its Meta data from the built-in JSON files
 	this.meta assigned as function to avoid being included in JSON.stringify
@@ -158,10 +169,10 @@ Quest Type:
 		if(typeof this.meta == "undefined"){
 			// Get data from Meta Manager
 			var MyMeta = KC3Meta.quest( this.id );
-			
+
 			// If we have meta for this quest
 			if(MyMeta){
-				// Attach meta info to this object 
+				// Attach meta info to this object
 				this.meta = function(){ return {
 					available: true,
 					code : MyMeta.code,
@@ -174,7 +185,7 @@ Quest Type:
 					this.tracking = MyMeta.tracking;
 				}
 			}else{
-				// Attach meta info to this object 
+				// Attach meta info to this object
 				this.meta = function(){ return {
 					code : "N/A",
 					name : KC3Meta.term("UntranslatedQuest"),
@@ -183,41 +194,41 @@ Quest Type:
 			}
 		}
 	};
-	
+
 	KC3Quest.prototype.isDaily = function(){
-		return (this.type == 2) 	// Daily Quest
-			|| (this.type == 4) 	// Bd4
+		return (this.type == 2)		// Daily Quest
+			|| (this.type == 4)		// Bd4
 			|| (this.type == 5);	// Bd6
 	};
-	
+
 	KC3Quest.prototype.isWeekly = function(){
 		return this.type == 3;	// Weekly Quest
 	};
-	
+
 	KC3Quest.prototype.isMonthly = function(){
 		return this.type == 6;	// Weekly Quest
 	};
-	
+
 	KC3Quest.prototype.isUnselected = function(){
-		return this.status == 1;	// Unselected 
+		return this.status == 1;	// Unselected
 	};
-	
+
 	KC3Quest.prototype.isSelected = function(){
 		return this.status == 2;	// Selected
 	};
-	
+
 	KC3Quest.prototype.isCompleted = function(){
 		return this.status == 3;	// Completed
 	};
-	
+
 	KC3Quest.prototype.autoAdjustCounter = function(){
 		if(this.tracking){
 			if(this.isCompleted()) {
 				this.tracking[0][0] = this.tracking[0][1];
 				return;
 			}
-			
-			if((this.id != 214) && (this.id != 607)  && (this.id != 608)){
+			// No adjustment for Bw1, F7, F8
+			if([214, 607, 608].indexOf(this.id) < 0){
 				var currentCount = this.tracking[0][0];
 				var maxCount = parseFloat(this.tracking[0][1]);
 				var progress = 0;
@@ -227,18 +238,34 @@ Quest Type:
 					progress = 0.8;
 				}
 				if (currentCount/maxCount < progress) {
-					console.log(this.tracking);
-					console.log(this.tracking[0][0]);
-					console.log(this.tracking[0][1]);
-					console.log(currentCount);
-					console.log(maxCount);
-					console.log("Adjust: " + currentCount/maxCount + " " + progress + " " + Math.ceil(maxCount * progress));
+					console.log("Adjusting quest", this.id, "tracking", currentCount,
+						"to", Math.ceil(maxCount * progress), "=", progress * 100 + "%", "of", maxCount);
 					this.tracking[0][0] = Math.ceil(maxCount * progress);
 				}
 			}
 		}
 	};
-	
+
+	KC3Quest.prototype.toggleCompletion = function(forceCompleted){
+		if(this.isSelected() || !!forceCompleted){
+			console.info("Force to complete quest:", this.id);
+			this.status = 3;
+			// Do not set tracking counter to max,
+			// as quest will be always completed when re-activated
+			KC3QuestManager.save();
+		} else if(this.isCompleted()){
+			console.info("Re-select quest again:", this.id);
+			this.status = 2;
+			// Reset counter, but do not touch Bw1
+			if(this.tracking && this.id != 214){
+				this.tracking[0][0] = 0;
+			}
+			KC3QuestManager.save();
+		} else {
+			console.warn("Quest", this.id, "status", this.status, "invalid");
+		}
+	};
+
 	KC3Quest.prototype.getColor = function(){
 		return [
 			"#555555", //0
@@ -252,5 +279,5 @@ Quest Type:
 			"#D75048", //8
 		][(this.id+"").substring(0,1)];
 	};
-	
+
 })();
